@@ -14,6 +14,16 @@ const PASTE_MODIFIER: Key = Key::Meta;
 #[cfg(not(target_os = "macos"))]
 const PASTE_MODIFIER: Key = Key::Control;
 
+// The "V" key of the paste chord. On macOS we use the raw virtual keycode (kVK_ANSI_V = 9)
+// rather than Key::Unicode('v'): resolving a character to a keycode routes through the Carbon
+// Text Input Source (TSM) APIs, which assert they run on the main thread and abort the whole
+// process (SIGTRAP) when called from our background injection thread. A raw keycode skips that
+// main-thread-only lookup entirely.
+#[cfg(target_os = "macos")]
+const PASTE_KEY: Key = Key::Other(9);
+#[cfg(not(target_os = "macos"))]
+const PASTE_KEY: Key = Key::Unicode('v');
+
 /// Restores the user's previous clipboard contents when dropped — runs even on early return or
 /// panic, so we never strand our refined text on the clipboard. Preserves text or, failing that,
 /// an image (arboard cannot round-trip RTF/HTML/file lists — a known v0 limitation).
@@ -65,7 +75,7 @@ pub fn inject(text: &str) -> Result<()> {
         .key(PASTE_MODIFIER, Press)
         .map_err(|e| AppError::Inject(e.to_string()))?;
     enigo
-        .key(Key::Unicode('v'), Click)
+        .key(PASTE_KEY, Click)
         .map_err(|e| AppError::Inject(e.to_string()))?;
     enigo
         .key(PASTE_MODIFIER, Release)

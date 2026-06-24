@@ -19,7 +19,7 @@ crate-type = ["lib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
 tauri-plugin-global-shortcut = "2"
 
 serde = { version = "1", features = ["derive"] }
@@ -49,6 +49,13 @@ windows-sys = { version = "0.60", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
 ] }
+
+# AVFoundation, used to request the macOS microphone permission (TCC) up front so the system
+# prompt appears at launch and we can detect an explicit denial with an actionable message.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-av-foundation = { version = "0.3", features = ["AVCaptureDevice", "AVMediaFormat"] }
+block2 = "0.6"
 
 [profile.release]
 panic = "abort"

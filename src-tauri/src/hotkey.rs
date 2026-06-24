@@ -59,6 +59,15 @@ pub fn toggle(app: &AppHandle) {
 }
 
 fn start_recording(app: &AppHandle, app_state: &AppState) {
+    // On macOS, fail fast with an actionable message if microphone access was explicitly denied —
+    // otherwise we'd record silence and surface a confusing "no speech detected" instead.
+    if crate::macperm::microphone_denied() {
+        let _ = app.emit(
+            "error",
+            "Microphone access is off. Enable it in System Settings → Privacy & Security → Microphone, then relaunch VoiceType AI.",
+        );
+        return;
+    }
     {
         let mut recorder = app_state.recorder.lock().unwrap();
         if let Err(e) = recorder.start() {
