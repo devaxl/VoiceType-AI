@@ -4,13 +4,13 @@ use thiserror::Error;
 /// All recoverable failures in the dictation pipeline.
 #[derive(Debug, Error)]
 pub enum AppError {
-    #[error("no microphone / input device available")]
+    #[error("no microphone found — connect an input device and grant Microphone access in System Settings → Privacy & Security")]
     NoInputDevice,
 
     #[error("audio error: {0}")]
     Audio(String),
 
-    #[error("no speech detected")]
+    #[error("no speech detected — speak a little longer, or check Microphone access in System Settings → Privacy & Security")]
     NoSpeech,
 
     #[error("missing OpenAI API key — set it in Settings")]

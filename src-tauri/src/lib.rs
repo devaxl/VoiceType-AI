@@ -5,6 +5,7 @@ mod error;
 mod hotkey;
 mod http;
 mod inject;
+mod macperm;
 mod persist;
 mod pipeline;
 mod refine;
@@ -73,12 +74,16 @@ pub fn run() {
                 });
             }
 
+            // On macOS, ask for microphone access up front so the system prompt appears at launch
+            // (with the Info.plist usage string) instead of silently capturing nothing on the
+            // first dictation. No-op on other platforms.
+            macperm::request_microphone_access();
+
             // Floating status HUD: a small transparent, click-through, always-on-top window that
             // shows recording/processing/success/error feedback even when the main window is hidden.
-            // Floating status HUD — Windows/Linux only for now. On macOS a borderless window
-            // can't be transparent without the macos-private-api (private Apple APIs), so it would
-            // render as a solid white rectangle; the HUD is deferred there until macOS is hardened.
-            #[cfg(not(target_os = "macos"))]
+            // Transparency on macOS relies on the `macos-private-api` feature + `macOSPrivateApi`
+            // config flag (both enabled); without them a borderless window renders as a solid
+            // white rectangle.
             {
                 if let Ok(hud) = tauri::WebviewWindowBuilder::new(
                     app.handle(),
