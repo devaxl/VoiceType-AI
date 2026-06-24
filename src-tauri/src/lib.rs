@@ -75,7 +75,7 @@ pub fn run() {
 
             // Floating status HUD: a small transparent, click-through, always-on-top window that
             // shows recording/processing/success/error feedback even when the main window is hidden.
-            if let Ok(hud) = tauri::WebviewWindowBuilder::new(
+            let mut hud_builder = tauri::WebviewWindowBuilder::new(
                 app.handle(),
                 "hud",
                 tauri::WebviewUrl::App("index.html".into()),
@@ -83,15 +83,18 @@ pub fn run() {
             .title("VoiceType HUD")
             .inner_size(240.0, 72.0)
             .decorations(false)
-            .transparent(true)
             .always_on_top(true)
             .skip_taskbar(true)
             .focused(false)
             .resizable(false)
             .shadow(false)
-            .visible(true)
-            .build()
+            .visible(true);
+            // `transparent` is only available off macOS unless the macos-private-api feature is on.
+            #[cfg(not(target_os = "macos"))]
             {
+                hud_builder = hud_builder.transparent(true);
+            }
+            if let Ok(hud) = hud_builder.build() {
                 let _ = hud.set_ignore_cursor_events(true);
                 if let Ok(Some(monitor)) = hud.primary_monitor() {
                     let size = monitor.size();
