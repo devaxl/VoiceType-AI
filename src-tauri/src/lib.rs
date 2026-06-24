@@ -75,35 +75,38 @@ pub fn run() {
 
             // Floating status HUD: a small transparent, click-through, always-on-top window that
             // shows recording/processing/success/error feedback even when the main window is hidden.
-            let mut hud_builder = tauri::WebviewWindowBuilder::new(
-                app.handle(),
-                "hud",
-                tauri::WebviewUrl::App("index.html".into()),
-            )
-            .title("VoiceType HUD")
-            .inner_size(240.0, 72.0)
-            .decorations(false)
-            .always_on_top(true)
-            .skip_taskbar(true)
-            .focused(false)
-            .resizable(false)
-            .shadow(false)
-            .visible(true);
-            // `transparent` is only available off macOS unless the macos-private-api feature is on.
+            // Floating status HUD — Windows/Linux only for now. On macOS a borderless window
+            // can't be transparent without the macos-private-api (private Apple APIs), so it would
+            // render as a solid white rectangle; the HUD is deferred there until macOS is hardened.
             #[cfg(not(target_os = "macos"))]
             {
-                hud_builder = hud_builder.transparent(true);
-            }
-            if let Ok(hud) = hud_builder.build() {
-                let _ = hud.set_ignore_cursor_events(true);
-                if let Ok(Some(monitor)) = hud.primary_monitor() {
-                    let size = monitor.size();
-                    let scale = monitor.scale_factor();
-                    let w = (240.0 * scale) as i32;
-                    let h = (72.0 * scale) as i32;
-                    let x = (size.width as i32 - w) / 2;
-                    let y = size.height as i32 - h - (90.0 * scale) as i32;
-                    let _ = hud.set_position(tauri::PhysicalPosition::new(x, y));
+                if let Ok(hud) = tauri::WebviewWindowBuilder::new(
+                    app.handle(),
+                    "hud",
+                    tauri::WebviewUrl::App("index.html".into()),
+                )
+                .title("VoiceType HUD")
+                .inner_size(240.0, 72.0)
+                .decorations(false)
+                .transparent(true)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .focused(false)
+                .resizable(false)
+                .shadow(false)
+                .visible(true)
+                .build()
+                {
+                    let _ = hud.set_ignore_cursor_events(true);
+                    if let Ok(Some(monitor)) = hud.primary_monitor() {
+                        let size = monitor.size();
+                        let scale = monitor.scale_factor();
+                        let w = (240.0 * scale) as i32;
+                        let h = (72.0 * scale) as i32;
+                        let x = (size.width as i32 - w) / 2;
+                        let y = size.height as i32 - h - (90.0 * scale) as i32;
+                        let _ = hud.set_position(tauri::PhysicalPosition::new(x, y));
+                    }
                 }
             }
 
