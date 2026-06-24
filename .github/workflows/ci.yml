@@ -1,0 +1,49 @@
+name: CI
+
+# Compile-checks the app (frontend + Rust) on Windows + macOS for every push to main and PR.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          # Default target dir only — keep any machine-specific
+          # src-tauri/.cargo/config.toml override gitignored.
+          workspaces: "./src-tauri -> target"
+
+      - name: Install frontend dependencies
+        run: npm ci || npm install
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build Rust (Tauri app)
+        working-directory: src-tauri
+        run: cargo build

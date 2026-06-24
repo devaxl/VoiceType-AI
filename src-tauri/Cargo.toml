@@ -1,0 +1,58 @@
+[package]
+name = "voicetype-ai"
+version = "0.1.0"
+description = "VoiceType AI — voice dictation with AI refinement"
+authors = ["VoiceType AI team"]
+edition = "2021"
+rust-version = "1.77"
+
+# The bulk of the app lives in a library so it can be reused (incl. mobile entry points).
+[lib]
+name = "voicetype_ai_lib"
+# Desktop-only for now: a plain rlib links straight into the .exe. The mobile crate-types
+# ("staticlib" for iOS, "cdylib" for Android) make the GNU/mingw linker emit a DLL export
+# table too large for it ("export ordinal too large"). Re-add them when targeting mobile
+# (which should use the MSVC/NDK toolchains anyway).
+crate-type = ["lib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-global-shortcut = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+# HTTP to the OpenAI API. rustls avoids a system OpenSSL dependency on Windows.
+reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls"] }
+
+# Async sleep for retry backoff (dedupes with Tauri's own tokio).
+tokio = { version = "1", features = ["time"] }
+
+# Audio capture + WAV encoding.
+cpal = "0.15"
+hound = "3"
+
+# Text injection (synthetic paste) + clipboard save/restore.
+enigo = "0.6"
+arboard = "3"
+
+# Secure API key storage in the OS credential store.
+keyring = { version = "3", features = ["apple-native", "windows-native"] }
+
+# Win32 calls for the focus-verify and secure-field guards (Windows only).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.60", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

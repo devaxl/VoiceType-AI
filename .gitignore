@@ -1,0 +1,19 @@
+# Node / frontend
+node_modules/
+dist/
+*.local
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# Machine-specific Cargo overrides (e.g. the local GNU-toolchain target-dir workaround).
+# CI and MSVC builds must use the default target dir — see CONTRIBUTING.md.
+src-tauri/.cargo/
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db

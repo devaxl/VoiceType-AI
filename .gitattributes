@@ -1,0 +1,11 @@
+# Normalize line endings: text files are LF in the repo, checked out natively.
+* text=auto eol=lf
+
+# Treat known binaries as binary (never line-ending-converted).
+*.png binary
+*.ico binary
+*.icns binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
