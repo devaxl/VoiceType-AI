@@ -46,6 +46,13 @@ pub fn run() {
             commands::trigger_toggle,
         ])
         .setup(|app| {
+            // On macOS, run as a menu-bar "accessory": no Dock icon, and the app keeps running in
+            // the background (the global hotkey stays active) after its window is closed. Closing
+            // the window hides it to the menu-bar tray; only the tray "Quit" fully exits. Without
+            // this the app carries a Dock icon and users naturally ⌘Q it — which really does quit.
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
             // Load persisted settings (replacing in-memory defaults) before anything reads them.
             *app.state::<AppState>().config.lock().unwrap() = persist::load(app.handle());
 
