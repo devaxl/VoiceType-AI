@@ -81,6 +81,23 @@ Everything below is **implemented and working today** in v0.
 - macOS builds are produced by CI and are **unsigned / not notarized**.
 - macOS Gatekeeper will block the first launch. **Right-click (or Control-click) the app → Open**, then confirm in the dialog to run it.
 
+#### macOS troubleshooting
+
+**The app won't open.** Because the build is unsigned, macOS may refuse to launch it on the first try. Either **right-click the app → Open** (then confirm), or open **System Settings → Privacy & Security**, scroll to the bottom, and click **Open Anyway** next to the VoiceType AI message.
+
+**Microphone or Accessibility permission is stuck** — e.g. *"speech not detected"* even after granting mic access, VoiceType AI missing from the permission list, or the hotkey not injecting text. Unsigned/ad-hoc builds can get a fresh code identity per install, so macOS sometimes holds on to stale permission state. Give the app a stable ad-hoc signature and reset its privacy grants, then relaunch and re-approve when prompted:
+
+```bash
+# Give the installed app a stable ad-hoc code signature
+codesign --force --deep --sign - "/Applications/VoiceType AI.app"
+
+# Reset just Accessibility, or reset ALL of the app's privacy grants
+sudo tccutil reset Accessibility com.devaxl.voicetype
+sudo tccutil reset All com.devaxl.voicetype
+```
+
+After running these, reopen VoiceType AI and approve the **Microphone** (and **Accessibility**, if asked) prompts — dictation should then work.
+
 > Prefer to build it yourself? See [Build from Source](#-build-from-source) — it takes one `npm install` and one command.
 
 ---
