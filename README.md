@@ -2,7 +2,7 @@
 
 # 🎙️ VoiceType AI
 
-### Press a hotkey, speak, and watch AI-refined text appear in any app — using your own OpenAI key.
+### Press a hotkey, speak, and watch AI-refined text appear in any app — using your own API keys (OpenAI, Anthropic, or Groq).
 
 A private, bring-your-own-key voice dictation tool for Windows (macOS via CI). Open source. Built with Tauri v2 + Rust.
 
@@ -23,11 +23,11 @@ A private, bring-your-own-key voice dictation tool for Windows (macOS via CI). O
 
 **VoiceType AI** turns your voice into polished, ready-to-paste text in *any* application — Slack, Outlook, VS Code, your browser, a terminal, anywhere you can type. Press a global hotkey, dictate naturally, press it again, and a moment later the refined text is injected straight into the focused field. No app switching. No copy-paste dance.
 
-It's a **bring-your-own-key** tool: you supply your own OpenAI API key, it lives in your operating system's keychain (never in plaintext), and your audio is held in memory only — never written to disk. Speech is transcribed by OpenAI's `gpt-4o-mini-transcribe`, then cleaned up for grammar, tone, and formatting by `gpt-4.1-nano` using a refinement profile *you* control.
+It's a **bring-your-own-key** tool: you supply your own API keys, they live in your operating system's keychain (never in plaintext), and your audio is held in memory only — never written to disk. You choose the engines: speech is transcribed by **OpenAI** or **Groq** (Groq's Whisper has a free tier), then cleaned up for grammar, tone, and formatting by **OpenAI** or **Anthropic (Claude)** using a refinement profile *you* control.
 
 If you've wanted a private, hackable, open-source alternative to commercial dictation apps like Wispr Flow — one where you own the keys, the data path, and the code — this is it.
 
-> **Status: working v0.** Built on a real production stack (Tauri v2 + Rust core), not a throwaway prototype. The full core loop, background/tray mode, safe-inject guards, a rebindable hotkey, refinement profiles, and persisted settings all work today. It is **not yet code-signed or packaged with an installer**, and macOS builds come from CI rather than a native dev environment (see [Roadmap](#-roadmap)).
+> **Status: working v0.** Built on a real production stack (Tauri v2 + Rust core), not a throwaway prototype. The full core loop, multi-provider model selection, background/menu-bar mode, safe-inject guards, a rebindable hotkey, refinement profiles, and persisted settings all work today. It is **not yet code-signed or packaged with an installer**, and macOS builds come from CI rather than a native dev environment (see [Roadmap](#-roadmap)).
 
 <!-- 📽️ DEMO GIF / SCREENSHOT GOES HERE -->
 <!-- Drop a short screen recording (hotkey → speak → refined text appears in Slack) at docs/demo.gif and reference it below: -->
@@ -45,8 +45,9 @@ Everything below is **implemented and working today** in v0.
 - 🎙️ **Low-latency mic capture** — native audio capture via `cpal` on a dedicated thread.
 
 ### 🧠 Transcribe & Refine
-- 🗣️ **OpenAI speech-to-text** — fast, accurate transcription with `gpt-4o-mini-transcribe`.
-- ✍️ **AI refinement** — `gpt-4.1-nano` cleans up grammar, tone, and formatting so you paste finished text, not a raw transcript.
+- 🔌 **Pick your providers & models** — choose the transcription engine (**OpenAI** or **Groq**) and the refinement engine (**OpenAI** or **Anthropic / Claude**) independently, each with a model dropdown. Keys are stored per provider, and the UI only asks for the ones you use — you can even run with **no OpenAI key at all** (Groq voice + Claude refine).
+- 🗣️ **Speech-to-text** — fast, accurate transcription via OpenAI (`gpt-4o-mini-transcribe`) or Groq (`whisper-large-v3-turbo`, free tier).
+- ✍️ **AI refinement** — clean up grammar, tone, and formatting with OpenAI (`gpt-4.1-nano`) or Anthropic (`claude-haiku-4-5`) so you paste finished text, not a raw transcript.
 - 📝 **Named refinement profiles** — switch between **General / Casual / Formal / Bulleted**, each fully editable, with add/delete and a quick switcher. Your active profile persists.
 - 📚 **Custom vocabulary** — feed the transcriber your jargon, product names, and acronyms so it spells your terms correctly.
 
@@ -59,7 +60,7 @@ Everything below is **implemented and working today** in v0.
 - ⛔ **Cancel-prior concurrency** — re-triggering while a pipeline is in flight discards the stale result and starts fresh.
 
 ### 🪟 Stays Out of Your Way
-- 📌 **Background / system-tray mode** — closing the window hides to the tray; the hotkey keeps working.
+- 📌 **Background / menu-bar mode** — closing the window hides it (a menu-bar app on macOS, system tray on Windows); the hotkey keeps working. Quit deliberately from the tray/menu-bar menu.
 - 💬 **Floating status HUD** — a click-through pill shows recording / processing / success / error, so you get feedback even when the main window is hidden.
 - 🌐 **Network resilience** — STT and refine calls retry with backoff on transient errors, with request timeouts; a failed paste retries, then falls back to clipboard.
 - 💾 **Persisted settings** — profiles, vocabulary, and hotkey are saved to disk (`%APPDATA%\com.devaxl.voicetype\config.json`).
@@ -107,7 +108,7 @@ After running these, reopen VoiceType AI and approve the **Microphone** (and **A
 Get from zero to dictating in under a minute:
 
 1. **Launch VoiceType AI.** The settings window opens.
-2. **Paste your OpenAI API key** and save it. (Grab one from [platform.openai.com/api-keys](https://platform.openai.com/api-keys).) It's stored securely in your OS keychain — never in plaintext.
+2. **Choose your providers and add the key(s).** In the **Models** section, pick your voice engine (**OpenAI** or **Groq**) and refinement engine (**OpenAI** or **Anthropic / Claude**), then paste the API key(s) for the providers you chose. The app only asks for keys you actually need — you can even run with no OpenAI key (Groq voice + Claude refine). Keys are stored securely in your OS keychain, never in plaintext. Grab keys from [OpenAI](https://platform.openai.com/api-keys), [Anthropic](https://console.anthropic.com), or [Groq](https://console.groq.com/keys) (free, no card).
 3. **Pick a refinement profile** — try **Casual** for Slack, **Formal** for email, **Bulleted** for PR descriptions.
 4. **Put your cursor in any text field** — Slack, Notepad, VS Code, your browser.
 5. **Press `Alt+Shift+D`**, speak naturally, then **press it again** to stop.
@@ -123,7 +124,8 @@ Everything is editable from the settings window:
 
 | Setting | What it does |
 |---|---|
-| 🔑 **OpenAI API key** | Stored in the OS keychain (Windows Credential Manager / macOS Keychain) — **never** written to plaintext config. |
+| 🔌 **Providers & models** | Pick the transcription provider (OpenAI / Groq) and refinement provider (OpenAI / Anthropic), each with a curated model dropdown. |
+| 🔑 **API keys (per provider)** | A separate key per provider (OpenAI / Anthropic / Groq), each stored in the OS keychain (Windows Credential Manager / macOS Keychain) — **never** written to plaintext config. The UI only prompts for the keys you're using. |
 | 📝 **Refinement profiles** | Named instruction styles (General / Casual / Formal / Bulleted). Edit the wording, add your own, delete ones you don't use, and switch the active profile on the fly. |
 | 📚 **Custom vocabulary** | A list of names, acronyms, and product terms passed to the transcriber so it gets your spelling right. |
 | ⌨️ **Custom hotkey** | Rebind the global shortcut to whatever fits your muscle memory. |
@@ -137,10 +139,10 @@ Settings persist to `%APPDATA%\com.devaxl.voicetype\config.json` (your API key s
 The pipeline, end to end:
 
 ```
-  Global hotkey  ──►  🎤 Mic capture (cpal)  ──►  🗣️ OpenAI STT (gpt-4o-mini-transcribe)
+  Global hotkey  ──►  🎤 Mic capture (cpal)  ──►  🗣️ Speech-to-text (OpenAI / Groq)
        (tap)                                                       │
                                                                    ▼
-   ⌨️ Inject into focused field  ◄──  🛡️ Safe-inject guards  ◄──  ✍️ AI refine (gpt-4.1-nano + your profile)
+   ⌨️ Inject into focused field  ◄──  🛡️ Safe-inject guards  ◄──  ✍️ AI refine (OpenAI / Anthropic + your profile)
    (clipboard-paste, typing fallback)   (focus-verify, secure-field, etc.)
 ```
 
@@ -153,10 +155,10 @@ The pipeline, end to end:
 Privacy is a first-class design goal, and we're honest about the trade-offs:
 
 - 🧠 **Audio stays in memory.** Your recordings are held in RAM only and **never written to disk**.
-- 🔑 **Your key, your account.** Audio and transcripts are sent to **OpenAI under your own API key** — there's no Devaxl server in the middle, no central proxy, and no telemetry on your content.
-- 🗝️ **Secrets stay in the keychain.** Your API key lives in the OS keychain, never in plaintext config.
-- 🏢 **For sensitive content, use a ZDR workspace.** Because requests go to OpenAI, we recommend issuing your key from an **OpenAI workspace with a Zero-Data-Retention (ZDR) / no-training agreement** for any confidential material. This is configured at your provider account level.
-- ⚠️ **Be aware:** anything you dictate is sent to a third-party API (OpenAI), even under ZDR. VoiceType AI makes the data path explicit so you can make an informed choice.
+- 🔑 **Your key, your account.** Audio and transcripts are sent to **your chosen providers (OpenAI, Anthropic, and/or Groq) under your own API keys** — there's no Devaxl server in the middle, no central proxy, and no telemetry on your content.
+- 🗝️ **Secrets stay in the keychain.** Your API keys live in the OS keychain (one per provider), never in plaintext config.
+- 🏢 **For sensitive content, use a no-retention account.** We recommend issuing keys from a provider account/workspace with a **Zero-Data-Retention (ZDR) / no-training agreement** for any confidential material. This is configured at your provider account level.
+- ⚠️ **Be aware:** anything you dictate is sent to third-party APIs (whichever providers you select), even under ZDR. VoiceType AI makes the data path explicit so you can make an informed choice.
 
 See [`docs/data-handling.md`](docs/data-handling.md) for the full disclosure.
 
@@ -174,7 +176,7 @@ See [`docs/data-handling.md`](docs/data-handling.md) for the full disclosure.
 npm install
 npm run tauri dev
 ```
-Then paste your OpenAI API key in the settings window and press `Alt+Shift+D` to try it.
+Then choose your providers, paste the matching API key(s) in the settings window, and press `Alt+Shift+D` to try it.
 
 ### Build installers
 ```bash
@@ -188,7 +190,6 @@ Or let **GitHub Actions** build cross-platform artifacts automatically when you 
 
 VoiceType AI v0 works today; here's where it's headed:
 
-- 🤖 **Anthropic / Claude support** — a second refinement provider behind the existing swappable trait.
 - ⚡ **Streaming STT** — stream transcript deltas the instant you stop recording, cutting perceived latency.
 - 🎯 **Per-app profile auto-switching** — automatically pick the right refinement profile based on the foreground app.
 - ✅ **Code signing (Windows)** — eliminate the SmartScreen warning.
@@ -214,11 +215,11 @@ If VoiceType AI is useful to you, the easiest way to help is to ⭐ **star the r
 | **Audio capture** | [`cpal`](https://crates.io/crates/cpal) |
 | **Injection** | [`enigo`](https://crates.io/crates/enigo) (typing) + [`arboard`](https://crates.io/crates/arboard) (clipboard) |
 | **Secrets** | [`keyring`](https://crates.io/crates/keyring) → OS keychain |
-| **Speech-to-text** | OpenAI `gpt-4o-mini-transcribe` |
-| **Refinement** | OpenAI `gpt-4.1-nano` |
+| **Speech-to-text** | OpenAI (`gpt-4o-mini-transcribe`) or Groq (`whisper-large-v3-turbo`) |
+| **Refinement** | OpenAI (`gpt-4.1-nano`) or Anthropic (`claude-haiku-4-5`) |
 | **CI / release** | GitHub Actions |
 
-*Keywords: voice dictation, speech-to-text, AI dictation, OpenAI, Whisper, Tauri, Rust, React, Windows, macOS, open source, productivity, Wispr Flow alternative.*
+*Keywords: voice dictation, speech-to-text, AI dictation, OpenAI, Anthropic, Claude, Groq, Whisper, Tauri, Rust, React, Windows, macOS, open source, productivity, Wispr Flow alternative.*
 
 ---
 
