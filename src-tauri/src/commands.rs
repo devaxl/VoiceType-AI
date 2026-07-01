@@ -1,23 +1,67 @@
 use tauri::{AppHandle, State};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
-use crate::config::{AppConfig, Profile};
+use crate::config::{AppConfig, Profile, Provider};
 use crate::hotkey;
 use crate::secrets;
 use crate::state::AppState;
 
 #[tauri::command]
-pub fn has_api_key() -> bool {
-    secrets::has_api_key()
+pub fn has_api_key(provider: Provider) -> bool {
+    secrets::has_api_key(provider)
 }
 
 #[tauri::command]
-pub fn set_api_key(key: String) -> Result<(), String> {
+pub fn set_api_key(provider: Provider, key: String) -> Result<(), String> {
     let key = key.trim();
     if key.is_empty() {
         return Err("API key is empty".into());
     }
-    secrets::store_api_key(key).map_err(|e| e.to_string())
+    secrets::store_api_key(provider, key).map_err(|e| e.to_string())
+}
+
+/// Set the speech-to-text provider (OpenAI or Groq) and its model, then persist.
+#[tauri::command]
+pub fn set_stt_config(
+    app: AppHandle,
+    state: State<AppState>,
+    provider: Provider,
+    model: String,
+) -> Result<(), String> {
+    let model = model.trim().to_string();
+    if model.is_empty() {
+        return Err("Model is empty".into());
+    }
+    let snapshot = {
+        let mut cfg = state.config.lock().unwrap();
+        cfg.stt_provider = provider;
+        cfg.stt_model = model;
+        cfg.clone()
+    };
+    crate::persist::save(&app, &snapshot);
+    Ok(())
+}
+
+/// Set the refinement provider (OpenAI or Anthropic) and its model, then persist.
+#[tauri::command]
+pub fn set_refine_config(
+    app: AppHandle,
+    state: State<AppState>,
+    provider: Provider,
+    model: String,
+) -> Result<(), String> {
+    let model = model.trim().to_string();
+    if model.is_empty() {
+        return Err("Model is empty".into());
+    }
+    let snapshot = {
+        let mut cfg = state.config.lock().unwrap();
+        cfg.refine_provider = provider;
+        cfg.refine_model = model;
+        cfg.clone()
+    };
+    crate::persist::save(&app, &snapshot);
+    Ok(())
 }
 
 /// Full config snapshot for the settings UI (profiles, active index, vocabulary, hotkey, …).

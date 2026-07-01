@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 type Status = "idle" | "recording" | "processing";
+type Provider = "openai" | "anthropic" | "groq";
 
 interface Profile {
   name: string;
@@ -13,6 +14,10 @@ interface Config {
   profiles: Profile[];
   active_profile: number;
   vocabulary: string;
+  stt_provider: Provider;
+  stt_model: string;
+  refine_provider: Provider;
+  refine_model: string;
   hotkey: string;
 }
 
@@ -21,6 +26,48 @@ const STATUS_LABEL: Record<Status, string> = {
   recording: "● Recording…",
   processing: "… Processing",
 };
+
+// Curated model menus. Voice (STT) offers OpenAI + Groq — Anthropic has no transcription API, so
+// it appears only under refinement.
+const STT_CATALOG: { provider: Provider; label: string; models: string[] }[] = [
+  { provider: "groq", label: "Groq — free tier", models: ["whisper-large-v3-turbo", "whisper-large-v3"] },
+  { provider: "openai", label: "OpenAI", models: ["gpt-4o-mini-transcribe", "gpt-4o-transcribe", "whisper-1"] },
+];
+const REFINE_CATALOG: { provider: Provider; label: string; models: string[] }[] = [
+  { provider: "anthropic", label: "Anthropic (Claude)", models: ["claude-haiku-4-5", "claude-sonnet-5"] },
+  { provider: "openai", label: "OpenAI", models: ["gpt-4.1-nano", "gpt-4o-mini"] },
+];
+
+const PROVIDER_LABEL: Record<Provider, string> = {
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  groq: "Groq",
+};
+const KEY_PLACEHOLDER: Record<Provider, string> = {
+  openai: "sk-…",
+  anthropic: "sk-ant-…",
+  groq: "gsk_…",
+};
+const KEY_HELP: Record<Provider, string> = {
+  openai: "platform.openai.com/api-keys",
+  anthropic: "console.anthropic.com → API keys",
+  groq: "console.groq.com/keys — free, no card",
+};
+
+const MODEL_LABEL: Record<string, string> = {
+  "whisper-large-v3-turbo": "Whisper v3 Turbo — fast, free",
+  "whisper-large-v3": "Whisper v3 — free",
+  "gpt-4o-mini-transcribe": "gpt-4o-mini-transcribe",
+  "gpt-4o-transcribe": "gpt-4o-transcribe — higher accuracy",
+  "whisper-1": "whisper-1 — legacy",
+  "claude-haiku-4-5": "Claude Haiku 4.5 — fast, cheap",
+  "claude-sonnet-5": "Claude Sonnet 5 — higher quality",
+  "gpt-4.1-nano": "gpt-4.1-nano — cheapest",
+  "gpt-4o-mini": "gpt-4o-mini",
+};
+const modelLabel = (m: string) => MODEL_LABEL[m] ?? m;
+
+const ALL_PROVIDERS: Provider[] = ["openai", "anthropic", "groq"];
 
 const PURE_MODIFIERS = [
   "ControlLeft", "ControlRight", "AltLeft", "AltRight",
@@ -47,8 +94,20 @@ function prettifyHotkey(accel: string): string {
 }
 
 export default function App() {
-  const [hasKey, setHasKey] = useState(false);
-  const [apiKey, setApiKey] = useState("");
+  const [hasKey, setHasKey] = useState<Record<Provider, boolean>>({
+    openai: false,
+    anthropic: false,
+    groq: false,
+  });
+  const [keyInput, setKeyInput] = useState<Record<Provider, string>>({
+    openai: "",
+    anthropic: "",
+    groq: "",
+  });
+  const [sttProvider, setSttProvider] = useState<Provider>("openai");
+  const [sttModel, setSttModel] = useState("gpt-4o-mini-transcribe");
+  const [refineProvider, setRefineProvider] = useState<Provider>("openai");
+  const [refineModel, setRefineModel] = useState("gpt-4.1-nano");
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [active, setActive] = useState(0);
   const [vocabulary, setVocabulary] = useState("");
@@ -60,12 +119,20 @@ export default function App() {
   const [saved, setSaved] = useState("");
 
   useEffect(() => {
-    invoke<boolean>("has_api_key").then(setHasKey).catch(() => {});
+    ALL_PROVIDERS.forEach((p) => {
+      invoke<boolean>("has_api_key", { provider: p })
+        .then((v) => setHasKey((h) => ({ ...h, [p]: v })))
+        .catch(() => {});
+    });
     invoke<Config>("get_config")
       .then((cfg) => {
         setProfiles(cfg.profiles);
         setActive(cfg.active_profile);
         setVocabulary(cfg.vocabulary);
+        setSttProvider(cfg.stt_provider);
+        setSttModel(cfg.stt_model);
+        setRefineProvider(cfg.refine_provider);
+        setRefineModel(cfg.refine_model);
         setHotkey(cfg.hotkey);
       })
       .catch(() => {});
@@ -90,15 +157,57 @@ export default function App() {
     setTimeout(() => setSaved(""), 2500);
   }
 
-  async function saveKey() {
+  // --- API keys (per provider) ---
+  async function saveKey(p: Provider) {
+    const key = keyInput[p];
     try {
-      await invoke("set_api_key", { key: apiKey });
-      setApiKey("");
-      setHasKey(true);
-      flash("API key saved to the OS keychain.");
+      await invoke("set_api_key", { provider: p, key });
+      setKeyInput((k) => ({ ...k, [p]: "" }));
+      setHasKey((h) => ({ ...h, [p]: true }));
+      flash(`${PROVIDER_LABEL[p]} API key saved to the OS keychain.`);
     } catch (e) {
       setError(String(e));
     }
+  }
+
+  // --- Voice / STT model ---
+  async function persistStt(provider: Provider, model: string) {
+    try {
+      await invoke("set_stt_config", { provider, model });
+      flash("Voice model saved.");
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+  async function changeSttProvider(provider: Provider) {
+    const model = STT_CATALOG.find((c) => c.provider === provider)!.models[0];
+    setSttProvider(provider);
+    setSttModel(model);
+    await persistStt(provider, model);
+  }
+  async function changeSttModel(model: string) {
+    setSttModel(model);
+    await persistStt(sttProvider, model);
+  }
+
+  // --- Refinement model ---
+  async function persistRefine(provider: Provider, model: string) {
+    try {
+      await invoke("set_refine_config", { provider, model });
+      flash("Refinement model saved.");
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+  async function changeRefineProvider(provider: Provider) {
+    const model = REFINE_CATALOG.find((c) => c.provider === provider)!.models[0];
+    setRefineProvider(provider);
+    setRefineModel(model);
+    await persistRefine(provider, model);
+  }
+  async function changeRefineModel(model: string) {
+    setRefineModel(model);
+    await persistRefine(refineProvider, model);
   }
 
   // --- Profiles ---
@@ -190,6 +299,10 @@ export default function App() {
   }
 
   const activeProfile = profiles[active];
+  const sttModels = STT_CATALOG.find((c) => c.provider === sttProvider)?.models ?? [sttModel];
+  const refineModels = REFINE_CATALOG.find((c) => c.provider === refineProvider)?.models ?? [refineModel];
+  // Only the providers actually selected across the two stages need a key.
+  const providersInUse = Array.from(new Set<Provider>([sttProvider, refineProvider]));
 
   return (
     <main className="container">
@@ -204,19 +317,80 @@ export default function App() {
       </p>
 
       <section className="card">
-        <h2>OpenAI API key {hasKey && <span className="ok">✓ set</span>}</h2>
+        <h2>Models</h2>
+
+        <label className="field-label">Voice (speech-to-text)</label>
         <div className="row">
-          <input
-            type="password"
-            placeholder={hasKey ? "•••••••••• (stored)" : "sk-…"}
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-          />
-          <button onClick={saveKey} disabled={!apiKey.trim()}>
-            Save
-          </button>
+          <select value={sttProvider} onChange={(e) => changeSttProvider(e.target.value as Provider)}>
+            {STT_CATALOG.map((c) => (
+              <option key={c.provider} value={c.provider}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+          <select value={sttModel} onChange={(e) => changeSttModel(e.target.value)}>
+            {sttModels.map((m) => (
+              <option key={m} value={m}>
+                {modelLabel(m)}
+              </option>
+            ))}
+          </select>
         </div>
-        <p className="muted">Stored in the OS keychain, never in plaintext.</p>
+
+        <label className="field-label" style={{ marginTop: 12 }}>
+          Refinement (AI rewrite)
+        </label>
+        <div className="row">
+          <select
+            value={refineProvider}
+            onChange={(e) => changeRefineProvider(e.target.value as Provider)}
+          >
+            {REFINE_CATALOG.map((c) => (
+              <option key={c.provider} value={c.provider}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+          <select value={refineModel} onChange={(e) => changeRefineModel(e.target.value)}>
+            {refineModels.map((m) => (
+              <option key={m} value={m}>
+                {modelLabel(m)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <p className="muted">
+          Anthropic (Claude) can only refine text — it has no voice model, so transcription always
+          uses OpenAI or Groq. Groq's Whisper is free (no card required).
+        </p>
+      </section>
+
+      <section className="card">
+        <h2>API keys</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          You only need a key for the provider(s) you selected above. Keys are stored in the OS
+          keychain, never in plaintext.
+        </p>
+        {providersInUse.map((p) => (
+          <div key={p} style={{ marginTop: 10 }}>
+            <label className="field-label">
+              {PROVIDER_LABEL[p]} {hasKey[p] && <span className="ok">✓ set</span>}
+            </label>
+            <div className="row">
+              <input
+                type="password"
+                placeholder={hasKey[p] ? "•••••••••• (stored)" : KEY_PLACEHOLDER[p]}
+                value={keyInput[p]}
+                onChange={(e) => setKeyInput((k) => ({ ...k, [p]: e.target.value }))}
+              />
+              <button onClick={() => saveKey(p)} disabled={!keyInput[p].trim()}>
+                Save
+              </button>
+            </div>
+            <p className="muted">Get one at {KEY_HELP[p]}.</p>
+          </div>
+        ))}
       </section>
 
       <section className="card">

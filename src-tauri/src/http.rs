@@ -1,4 +1,4 @@
-//! Shared HTTP client (with timeouts) and retry/backoff helpers for the OpenAI calls.
+//! Shared HTTP client (with timeouts) and retry/backoff helpers for the provider API calls.
 
 use std::sync::OnceLock;
 use std::time::Duration;

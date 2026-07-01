@@ -36,30 +36,50 @@ async fn run_inner(
     }
 
     let wav = audio::to_wav(&recording)?;
-    let api_key = secrets::get_api_key()?;
 
-    let (system_prompt, vocabulary, stt_model, refine_model) = {
+    let (system_prompt, vocabulary, stt_provider, stt_model, refine_provider, refine_model) = {
         let state = app.state::<AppState>();
         let cfg = state.config.lock().unwrap();
         (
             cfg.active_prompt(),
             cfg.vocabulary.clone(),
+            cfg.stt_provider,
             cfg.stt_model.clone(),
+            cfg.refine_provider,
             cfg.refine_model.clone(),
         )
     };
 
-    // 1. Speech-to-text (with the custom-vocabulary hint).
-    let transcript = stt::transcribe(&api_key, &stt_model, wav, &vocabulary).await?;
+    // 1. Speech-to-text (with the custom-vocabulary hint). A missing STT key is fatal — there's
+    // nothing to transcribe without it.
+    let stt_key = secrets::get_api_key(stt_provider)?;
+    let transcript = stt::transcribe(stt_provider, &stt_key, &stt_model, wav, &vocabulary).await?;
     if is_empty_or_hallucination(&transcript) {
         return Err(AppError::NoSpeech);
     }
 
-    // 2. Refinement, with a fallback to the raw transcript on any failure.
-    let final_text = match refine::refine(&api_key, &refine_model, &system_prompt, &transcript).await
-    {
-        Ok(refined) if !refined.trim().is_empty() => refined,
-        _ => transcript,
+    // 2. Refinement, with a fallback to the raw transcript on any failure. A missing refine key
+    // (e.g. the user chose Anthropic but hasn't entered a Claude key yet) falls back to the raw
+    // transcript rather than losing the dictation.
+    let final_text = match secrets::get_api_key(refine_provider) {
+        Ok(refine_key) => {
+            match refine::refine(refine_provider, &refine_key, &refine_model, &system_prompt, &transcript)
+                .await
+            {
+                Ok(refined) if !refined.trim().is_empty() => refined,
+                _ => transcript,
+            }
+        }
+        Err(_) => {
+            let _ = app.emit(
+                "info",
+                format!(
+                    "No {} API key set — inserting the raw transcript.",
+                    refine_provider.label()
+                ),
+            );
+            transcript
+        }
     };
 
     // 3a. Cancel-prior: bail before injecting if a newer dictation has started.

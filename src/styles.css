@@ -152,6 +152,12 @@ button.ghost {
   color: var(--ok);
   font-size: 12px;
 }
+.field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
 
 .output {
   white-space: pre-wrap;

@@ -13,8 +13,8 @@ pub enum AppError {
     #[error("no speech detected — speak a little longer, or check Microphone access in System Settings → Privacy & Security")]
     NoSpeech,
 
-    #[error("missing OpenAI API key — set it in Settings")]
-    MissingApiKey,
+    #[error("missing {0} API key — set it in Settings")]
+    MissingApiKey(&'static str),
 
     #[error("network error: {0}")]
     Network(String),

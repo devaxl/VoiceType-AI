@@ -1,18 +1,29 @@
+use crate::config::Provider;
 use crate::error::{AppError, Result};
 use crate::http;
 
-const ENDPOINT: &str = "https://api.openai.com/v1/audio/transcriptions";
+/// Transcription endpoint for the given provider. Groq exposes an OpenAI-compatible
+/// `/audio/transcriptions` route, so the multipart body below is identical for both.
+fn endpoint(provider: Provider) -> &'static str {
+    match provider {
+        Provider::Groq => "https://api.groq.com/openai/v1/audio/transcriptions",
+        // Anthropic has no transcription API; the UI never offers it for STT. Fall back to OpenAI.
+        Provider::OpenAI | Provider::Anthropic => "https://api.openai.com/v1/audio/transcriptions",
+    }
+}
 
-/// Transcribe a WAV byte buffer via the OpenAI transcription API, retrying transient failures.
+/// Transcribe a WAV byte buffer via the provider's transcription API, retrying transient failures.
 ///
 /// `vocabulary` (if non-empty) is sent as the `prompt` parameter to bias recognition toward the
 /// user's jargon/terms. Uses `response_format=text`, so the body is the plain transcript.
 pub async fn transcribe(
+    provider: Provider,
     api_key: &str,
     model: &str,
     wav: Vec<u8>,
     vocabulary: &str,
 ) -> Result<String> {
+    let endpoint = endpoint(provider);
     let mut last_err = String::new();
 
     for attempt in 0..http::MAX_ATTEMPTS {
@@ -30,7 +41,7 @@ pub async fn transcribe(
         }
 
         match http::client()
-            .post(ENDPOINT)
+            .post(endpoint)
             .bearer_auth(api_key)
             .multipart(form)
             .send()
