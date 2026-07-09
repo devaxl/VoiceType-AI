@@ -32,9 +32,10 @@ pub const STT_MODEL: &str = "gpt-4o-mini-transcribe";
 pub const REFINE_PROVIDER: Provider = Provider::OpenAI;
 pub const REFINE_MODEL: &str = "gpt-4.1-nano";
 
-/// Hard cap on a single recording (safety against a stuck hotkey). ~5 minutes; audio is
-/// downmixed to mono + 16 kHz before upload, so this stays well under the API's 25 MB limit.
-pub const MAX_RECORDING_SECS: u64 = 300;
+/// Hard cap on a single recording (safety against a stuck hotkey). ~12 minutes; audio is
+/// downmixed to mono + 16 kHz (~23 MB at 12 min), staying under the 25 MB upload limit on every
+/// provider (OpenAI, Groq free/paid).
+pub const MAX_RECORDING_SECS: u64 = 720;
 
 /// Default global hotkey, in the accelerator format the global-shortcut plugin parses
 /// (modifier names + a KeyboardEvent.code). Alt+Shift+D = lower collision risk.

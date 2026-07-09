@@ -1,6 +1,6 @@
 [package]
 name = "voicetype-ai"
-version = "0.1.5"
+version = "0.1.6"
 description = "VoiceType AI — voice dictation with AI refinement"
 authors = ["VoiceType AI team"]
 edition = "2021"
