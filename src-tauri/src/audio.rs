@@ -133,11 +133,20 @@ fn capture_loop(stop_rx: Receiver<()>) -> Result<Recording> {
     })
 }
 
-/// Encode a recording as a 16-bit PCM WAV in memory (what the OpenAI transcription API accepts).
+/// Target sample rate for uploaded audio. Whisper-family models run at 16 kHz internally, so
+/// downmixing to mono 16 kHz preserves accuracy while shrinking the file ~6x — a 5-minute note is
+/// ~9.6 MB, comfortably under the transcription API's 25 MB upload limit.
+const TARGET_SAMPLE_RATE: u32 = 16_000;
+
+/// Encode a recording as a 16-bit PCM WAV in memory, downmixed to mono and resampled to 16 kHz
+/// (what the transcription API wants, and small enough for long notes).
 pub fn to_wav(recording: &Recording) -> Result<Vec<u8>> {
+    let mono = downmix_to_mono(&recording.samples, recording.channels);
+    let samples = resample_linear(&mono, recording.sample_rate, TARGET_SAMPLE_RATE);
+
     let spec = hound::WavSpec {
-        channels: recording.channels,
-        sample_rate: recording.sample_rate,
+        channels: 1,
+        sample_rate: TARGET_SAMPLE_RATE,
         bits_per_sample: 16,
         sample_format: hound::SampleFormat::Int,
     };
@@ -146,7 +155,7 @@ pub fn to_wav(recording: &Recording) -> Result<Vec<u8>> {
     {
         let mut writer = hound::WavWriter::new(&mut cursor, spec)
             .map_err(|e| AppError::Audio(e.to_string()))?;
-        for &sample in &recording.samples {
+        for &sample in &samples {
             writer
                 .write_sample(sample)
                 .map_err(|e| AppError::Audio(e.to_string()))?;
@@ -156,6 +165,41 @@ pub fn to_wav(recording: &Recording) -> Result<Vec<u8>> {
             .map_err(|e| AppError::Audio(e.to_string()))?;
     }
     Ok(cursor.into_inner())
+}
+
+/// Average interleaved channels down to a single mono track.
+fn downmix_to_mono(samples: &[i16], channels: u16) -> Vec<i16> {
+    if channels <= 1 {
+        return samples.to_vec();
+    }
+    let ch = channels as usize;
+    samples
+        .chunks_exact(ch)
+        .map(|frame| {
+            let sum: i32 = frame.iter().map(|&s| s as i32).sum();
+            (sum / ch as i32) as i16
+        })
+        .collect()
+}
+
+/// Linear-interpolation resampler (mono). Adequate for speech + Whisper and dependency-free.
+fn resample_linear(samples: &[i16], in_rate: u32, out_rate: u32) -> Vec<i16> {
+    if samples.is_empty() || in_rate == 0 || in_rate == out_rate {
+        return samples.to_vec();
+    }
+    let ratio = out_rate as f64 / in_rate as f64;
+    let out_len = ((samples.len() as f64) * ratio).round() as usize;
+    let last = samples.len() - 1;
+    let mut out = Vec::with_capacity(out_len);
+    for i in 0..out_len {
+        let src = i as f64 / ratio;
+        let idx = src.floor() as usize;
+        let frac = src - idx as f64;
+        let a = samples[idx.min(last)] as f64;
+        let b = samples[(idx + 1).min(last)] as f64;
+        out.push((a + (b - a) * frac).round() as i16);
+    }
+    out
 }
 
 /// Heuristic minimum-duration gate (~300ms of interleaved samples) to drop accidental taps.
